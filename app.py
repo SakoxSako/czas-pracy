@@ -172,7 +172,7 @@ def main_app():
             csv_data = history[["Data", "Wejście", "Wyjście", "Godziny"]].to_csv(sep=';', decimal=',', index=False).encode('utf-8-sig')
             
             st.download_button(
-                label="📥 Pobierz poprawny plik Excel (CSV)",
+                label="📥 Pobierz plik Excel (CSV)",
                 data=csv_data,
                 file_name=f'godziny_pracy_{username}.csv',
                 mime='text/csv'
@@ -219,3 +219,4 @@ if st.session_state['logged_in']:
     main_app()
 else:
     login_page()
+
