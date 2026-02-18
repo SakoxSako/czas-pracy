@@ -60,9 +60,24 @@ if 'username' not in st.session_state:
 # --- FUNKCJE LOGIKI APLIKACJI ---
 
 def get_logs_df():
-    # Pobiera wszystkie dane z arkusza logs do DataFrame
-    data = worksheet_logs.get_all_records()
-    return pd.DataFrame(data)
+    # 1. Pobieramy wszystkie wartości jako surową tablicę (lista list)
+    all_values = worksheet_logs.get_all_values()
+    
+    # 2. Zabezpieczenie: jeśli arkusz jest pusty
+    if not all_values:
+        return pd.DataFrame(columns=["Użytkownik", "Data", "Wejście", "Wyjście", "Status", "Godziny"])
+
+    # 3. Pierwszy wiersz to nagłówki. Wyciągamy go.
+    headers = all_values.pop(0)
+    
+    # 4. MAGICZNA NAPRAWA: Usuwamy spacje z początku i końca każdego nagłówka
+    # Dzięki temu "Status " zamieni się na "Status"
+    clean_headers = [h.strip() for h in headers]
+
+    # 5. Tworzymy tabelę używając wyczyszczonych nagłówków
+    df = pd.DataFrame(all_values, columns=clean_headers)
+    
+    return df
 
 def get_users_df():
     # Pobiera użytkowników
@@ -224,3 +239,4 @@ if st.session_state['logged_in']:
     main_app()
 else:
     login_page()
+
