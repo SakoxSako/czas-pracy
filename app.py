@@ -4,7 +4,7 @@ from datetime import datetime
 import hashlib
 import gspread
 from google.oauth2.service_account import Credentials
-from zoneinfo import ZoneInfo  # <--- TO NAPRAWIA CZAS
+from zoneinfo import ZoneInfo  
 
 # --- KONFIGURACJA ---
 try:
@@ -100,7 +100,7 @@ def main_app():
         if not is_working:
             st.info("Status: POZA PRACĄ")
             if st.button("🟢 ZACZNIJ PRACĘ", use_container_width=True):
-                # TERAZ CZAS JEST POLSKI
+                #  CZAS POLSKI
                 now = datetime.now(ZoneInfo("Europe/Warsaw"))
                 
                 row = [
@@ -119,7 +119,7 @@ def main_app():
             st.success(f"Pracujesz od: {start_time_str[11:16]}")
             
             if st.button("🔴 KOŃCZĘ PRACĘ", use_container_width=True):
-                # TERAZ CZAS JEST POLSKI
+                #  CZAS POLSKI
                 now = datetime.now(ZoneInfo("Europe/Warsaw"))
                 end_time_str = now.strftime("%Y-%m-%d %H:%M:%S")
                 
@@ -149,7 +149,7 @@ def main_app():
     auto_action = query_params.get("akcja", None)
     
     if auto_action:
-        # TERAZ CZAS JEST POLSKI DLA QR KODÓW TEŻ
+        #  CZAS POLSKI DLA QR KODÓW 
         now = datetime.now(ZoneInfo("Europe/Warsaw"))
         
         if auto_action == "start" and not is_working:
@@ -166,6 +166,17 @@ def main_app():
         history = user_df[user_df["Status"] == "Zakończono"]
         if not history.empty:
             st.dataframe(history[["Data", "Wejście", "Wyjście", "Godziny"]].sort_index(ascending=False), use_container_width=True)
+
+            
+            
+            csv_data = history[["Data", "Wejście", "Wyjście", "Godziny"]].to_csv(sep=';', decimal=',', index=False).encode('utf-8-sig')
+            
+            st.download_button(
+                label="📥 Pobierz poprawny plik Excel (CSV)",
+                data=csv_data,
+                file_name=f'godziny_pracy_{username}.csv',
+                mime='text/csv'
+            )
 
 # --- LOGOWANIE ---
 def login_page():
