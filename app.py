@@ -4,11 +4,10 @@ from datetime import datetime
 import hashlib
 import gspread
 from google.oauth2.service_account import Credentials
+from zoneinfo import ZoneInfo  # <--- TO NAPRAWIA CZAS
 
 # --- KONFIGURACJA ---
-# Pobieramy dane z 'Secrets' w Streamlit Cloud
 try:
-    # Konfiguracja dostępu do Google Sheets
     SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
@@ -19,7 +18,6 @@ try:
     )
     gc = gspread.authorize(credentials)
     
-    # Otwieramy arkusz po URL
     sh = gc.open_by_url(st.secrets["spreadsheet_url"])
     worksheet_logs = sh.worksheet("logs")
     worksheet_users = sh.worksheet("users")
@@ -35,10 +33,6 @@ def make_hashes(password):
 def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
-def round_time_to_15min(dt):
-    # (Funkcja opcjonalna do wyświetlania)
-    return dt.strftime("%H:%M")
-
 def calculate_duration(start_str, end_str):
     fmt = "%Y-%m-%d %H:%M:%S"
     try:
@@ -49,46 +43,38 @@ def calculate_duration(start_str, end_str):
     except:
         return 0.0
 
+def get_logs_df():
+    # PANCERNA METODA POBIERANIA DANYCH
+    all_values = worksheet_logs.get_all_values()
+    if not all_values:
+        return pd.DataFrame(columns=["Użytkownik", "Data", "Wejście", "Wyjście", "Status", "Godziny"])
+    
+    headers = all_values.pop(0)
+    clean_headers = [h.strip() for h in headers]
+    df = pd.DataFrame(all_values, columns=clean_headers)
+    return df
+
+def get_users_df():
+    all_values = worksheet_users.get_all_values()
+    if not all_values:
+         return pd.DataFrame(columns=["username", "password"])
+    headers = all_values.pop(0)
+    clean_headers = [h.strip() for h in headers]
+    return pd.DataFrame(all_values, columns=clean_headers)
+
 # --- INICJALIZACJA UI ---
-st.set_page_config(page_title="Rejestrator Czasu", page_icon="☁️")
+st.set_page_config(page_title="Rejestrator Czasu", page_icon="🇵🇱")
 
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state:
     st.session_state['username'] = ''
 
-# --- FUNKCJE LOGIKI APLIKACJI ---
-
-def get_logs_df():
-    # 1. Pobieramy wszystkie wartości jako surową tablicę (lista list)
-    all_values = worksheet_logs.get_all_values()
-    
-    # 2. Zabezpieczenie: jeśli arkusz jest pusty
-    if not all_values:
-        return pd.DataFrame(columns=["Użytkownik", "Data", "Wejście", "Wyjście", "Status", "Godziny"])
-
-    # 3. Pierwszy wiersz to nagłówki. Wyciągamy go.
-    headers = all_values.pop(0)
-    
-    # 4. MAGICZNA NAPRAWA: Usuwamy spacje z początku i końca każdego nagłówka
-    # Dzięki temu "Status " zamieni się na "Status"
-    clean_headers = [h.strip() for h in headers]
-
-    # 5. Tworzymy tabelę używając wyczyszczonych nagłówków
-    df = pd.DataFrame(all_values, columns=clean_headers)
-    
-    return df
-
-def get_users_df():
-    # Pobiera użytkowników
-    data = worksheet_users.get_all_records()
-    return pd.DataFrame(data)
-
+# --- FUNKCJA GŁÓWNA ---
 def main_app():
     username = st.session_state['username']
     st.sidebar.success(f"Zalogowany: {username}")
     
-    # Przycisk wylogowania
     if st.sidebar.button("Wyloguj"):
         st.session_state['logged_in'] = False
         st.session_state['username'] = ''
@@ -96,21 +82,16 @@ def main_app():
 
     st.title(f"Cześć, {username}! 👋")
 
-    # Pobieramy aktualne dane
     df = get_logs_df()
     
-    # Sprawdzamy status
+    is_working = False
+    user_df = pd.DataFrame()
+
     if not df.empty:
-        # Filtrujemy wpisy tego usera
         user_df = df[df["Użytkownik"] == username]
         if not user_df.empty:
             last_entry = user_df.iloc[-1]
             is_working = last_entry["Status"] == "W Pracy"
-        else:
-            is_working = False
-    else:
-        is_working = False
-        user_df = pd.DataFrame()
 
     # --- LOGIKA START / STOP ---
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -119,47 +100,41 @@ def main_app():
         if not is_working:
             st.info("Status: POZA PRACĄ")
             if st.button("🟢 ZACZNIJ PRACĘ", use_container_width=True):
-                now = datetime.now()
-                # Przygotuj wiersz (kolejność musi się zgadzać z kolumnami w Google Sheets)
+                # TERAZ CZAS JEST POLSKI
+                now = datetime.now(ZoneInfo("Europe/Warsaw"))
+                
                 row = [
                     username,
                     now.strftime("%Y-%m-%d"),
                     now.strftime("%Y-%m-%d %H:%M:%S"),
-                    "",  # Wyjście puste
+                    "",
                     "W Pracy",
                     0.0
                 ]
                 worksheet_logs.append_row(row)
-                st.toast("Zalogowano wejście!")
+                st.toast(f"Zalogowano wejście: {now.strftime('%H:%M')}")
                 st.rerun()
         else:
             start_time_str = user_df.iloc[-1]['Wejście']
             st.success(f"Pracujesz od: {start_time_str[11:16]}")
             
             if st.button("🔴 KOŃCZĘ PRACĘ", use_container_width=True):
-                now = datetime.now()
+                # TERAZ CZAS JEST POLSKI
+                now = datetime.now(ZoneInfo("Europe/Warsaw"))
                 end_time_str = now.strftime("%Y-%m-%d %H:%M:%S")
                 
-                # Musimy znaleźć numer wiersza w Google Sheets do aktualizacji.
-                # To jest nieco trudniejsze niż w CSV. Szukamy ostatniego wiersza tego usera.
+                all_users = worksheet_logs.col_values(1)
+                all_statuses = worksheet_logs.col_values(5)
                 
-                # Pobieramy całą kolumnę A (Użytkownik) i E (Status) żeby znaleźć wiersz
-                all_users = worksheet_logs.col_values(1) # Kolumna A
-                all_statuses = worksheet_logs.col_values(5) # Kolumna E
-                
-                # Szukamy od końca wiersza, który ma nasz login I status "W Pracy"
                 found_row_index = -1
-                # Iterujemy od końca
                 for i in range(len(all_users) - 1, -1, -1):
                     if all_users[i] == username and all_statuses[i] == "W Pracy":
-                        found_row_index = i + 1 # +1 bo arkusze są numerowane od 1
+                        found_row_index = i + 1
                         break
                 
                 if found_row_index != -1:
                     duration = calculate_duration(user_df.iloc[-1]['Wejście'], end_time_str)
                     
-                    # Aktualizacja komórek w znalezionym wierszu
-                    # D (Wyjście), E (Status), F (Godziny)
                     worksheet_logs.update_cell(found_row_index, 4, end_time_str)
                     worksheet_logs.update_cell(found_row_index, 5, "Zakończono")
                     worksheet_logs.update_cell(found_row_index, 6, duration)
@@ -167,34 +142,32 @@ def main_app():
                     st.toast(f"Koniec pracy. Czas: {duration}h")
                     st.rerun()
                 else:
-                    st.error("Błąd synchronizacji. Nie znaleziono aktywnego wiersza.")
+                    st.error("Błąd synchronizacji.")
 
     # --- AUTOMATYZACJA (QR) ---
-    # Obsługa query params dla QR kodów
     query_params = st.query_params
     auto_action = query_params.get("akcja", None)
     
     if auto_action:
+        # TERAZ CZAS JEST POLSKI DLA QR KODÓW TEŻ
+        now = datetime.now(ZoneInfo("Europe/Warsaw"))
+        
         if auto_action == "start" and not is_working:
-             # Logika startu (powtórzona dla QR)
-             now = datetime.now()
              row = [username, now.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d %H:%M:%S"), "", "W Pracy", 0.0]
              worksheet_logs.append_row(row)
              st.query_params.clear()
              st.rerun()
-        elif auto_action == "stop" and is_working:
-             # Logika stopu byłaby tu (wymaga przeniesienia logiki szukania wiersza do osobnej funkcji, 
-             # dla uproszczenia kodu pominąłem to w tym bloku, ale działałoby analogicznie jak przycisk)
-             pass
-
+        # (Tu można dodać logikę STOP dla QR jeśli potrzebna w przyszłości)
 
     st.divider()
     st.subheader("Historia")
     if not user_df.empty:
+        # Filtrujemy, żeby pokazać tylko zakończone i posortowane
         history = user_df[user_df["Status"] == "Zakończono"]
-        st.dataframe(history[["Data", "Wejście", "Wyjście", "Godziny"]].sort_index(ascending=False), use_container_width=True)
+        if not history.empty:
+            st.dataframe(history[["Data", "Wejście", "Wyjście", "Godziny"]].sort_index(ascending=False), use_container_width=True)
 
-# --- EKRAN LOGOWANIA ---
+# --- LOGOWANIE ---
 def login_page():
     st.title("🔐 Panel Logowania")
     menu = ["Logowanie", "Rejestracja"]
@@ -206,7 +179,6 @@ def login_page():
         if st.button("Zaloguj"):
             df_users = get_users_df()
             if not df_users.empty:
-                # Szukanie usera
                 found = df_users[df_users['username'] == user]
                 if not found.empty:
                     stored_hash = found.iloc[0]['password']
@@ -219,24 +191,20 @@ def login_page():
                 else:
                     st.error("Brak użytkownika")
             else:
-                st.error("Baza użytkowników jest pusta")
+                st.error("Baza pusta")
 
     elif choice == "Rejestracja":
         new_user = st.text_input("Nowy Login")
         new_pass = st.text_input("Nowe Hasło", type='password')
         if st.button("Utwórz konto"):
             df_users = get_users_df()
-            # Sprawdź czy user już jest
             if not df_users.empty and new_user in df_users['username'].values:
                 st.warning("Użytkownik już istnieje")
             elif new_user and new_pass:
-                # Dodaj do arkusza users
                 worksheet_users.append_row([new_user, make_hashes(new_pass)])
                 st.success("Konto utworzone! Przejdź do logowania.")
 
-# --- ROUTING ---
 if st.session_state['logged_in']:
     main_app()
 else:
     login_page()
-
