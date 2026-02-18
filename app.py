@@ -6,8 +6,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 from zoneinfo import ZoneInfo
 import time
-import qrcode  # <--- NOWA BIBLIOTEKA
-from io import BytesIO # <--- DO OBSŁUGI OBRAZKA W PAMIĘCI
+import qrcode
+from io import BytesIO
 
 # --- KONFIGURACJA ---
 try:
@@ -74,8 +74,6 @@ def generate_qr_image(url):
     qr.add_data(url)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
-    
-    # Konwersja do formatu, który zrozumie Streamlit
     buffer = BytesIO()
     img.save(buffer, format="PNG")
     return buffer.getvalue()
@@ -158,7 +156,8 @@ def main_app():
                 save_to_personal_sheet(username, "start", row_data=row)
                 st.toast(f"✅ QR START: {now.strftime('%H:%M')}")
             else:
-                st.toast("⚠️ Już pracujesz!", icon="Info")
+                # POPRAWKA 1: Zamiana icon="Info" na icon="⚠️"
+                st.toast("⚠️ Już pracujesz!", icon="⚠️")
                 
         elif qr_action == "stop":
             if is_working_qr:
@@ -183,12 +182,12 @@ def main_app():
                 else:
                     st.error("Błąd synchronizacji QR.")
             else:
-                st.toast("⚠️ Nie pracujesz, więc nie możesz skończyć.", icon="Info")
+                # POPRAWKA 2: Zamiana icon="Info" na icon="🚫"
+                st.toast("⚠️ Nie pracujesz, więc nie możesz skończyć.", icon="🚫")
 
         st.query_params.clear()
         time.sleep(2)
         st.rerun()
-
 
     # --- PASEK BOCZNY Z KODAMI QR ---
     st.sidebar.success(f"Zalogowany: {username}")
@@ -201,8 +200,8 @@ def main_app():
              users = get_users_df()
              token = users[users['username']==username].iloc[0]['password']
 
-        
-        base_url = "https://czas-pracymm.streamlit.app" 
+        # !!! WAŻNE !!! UPEWNIJ SIĘ ŻE TEN ADRES JEST POPRAWNY (skopiuj go z przeglądarki)
+        base_url = "https://twoja-aplikacja.streamlit.app" 
         
         url_start = f"{base_url}/?user={username}&token={token}&akcja=start"
         url_stop = f"{base_url}/?user={username}&token={token}&akcja=stop"
