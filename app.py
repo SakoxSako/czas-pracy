@@ -201,7 +201,7 @@ def main_app():
              token = users[users['username']==username].iloc[0]['password']
 
         # !!! WAŻNE !!! UPEWNIJ SIĘ ŻE TEN ADRES JEST POPRAWNY (skopiuj go z przeglądarki)
-        base_url = "https://twoja-aplikacja.streamlit.app" 
+        base_url = "https://czas-pracymm.streamlit.app" 
         
         url_start = f"{base_url}/?user={username}&token={token}&akcja=start"
         url_stop = f"{base_url}/?user={username}&token={token}&akcja=stop"
@@ -320,3 +320,4 @@ if st.session_state['logged_in']:
     main_app()
 else:
     login_page()
+
